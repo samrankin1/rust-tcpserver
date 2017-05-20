@@ -32,7 +32,7 @@ fn net_encode_string(data: String) -> Vec<u8> {
 }
 
 fn net_decode_string(encoded: Vec<u8>) -> String {
-	String::from_utf8(encoded) // TODO: from_utf8_unchecked()? sounds like an exploiter's dream
+	String::from_utf8(encoded)
 		.expect("utf8 error decoding string")
 }
 
