@@ -1,5 +1,6 @@
 extern crate byteorder;
 
+use std::io;
 use std::io::Write;
 use std::io::Read;
 use std::io::Cursor;
@@ -46,8 +47,7 @@ fn write_bytes_auto(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
 	let len_sent: usize = write_bytes(stream, &encoded_len);
 	let bytes_sent = write_bytes(stream, bytes);
 
-	println!("wrote {} + {} bytes", len_sent, bytes_sent);
-	// TODO return usize of bytes_sent, remove debug messages
+	// println!("wrote {} + {} bytes", len_sent, bytes_sent);
 
 	bytes_sent
 }
@@ -80,27 +80,55 @@ fn read_bytes(stream: &mut TcpStream, count: u64) -> Vec<u8> {
 	stream.read(&mut result)
 		.expect("failed to read bytes");
 
-	result
-
 	// println!("bytes: [u8; {}] = {:?}", count, result);
+
+	result
 }
 
 fn write_i32(stream: &mut TcpStream, data: i32) {
-	// CONT: implement
+	let mut bytes: [u8; 4] = [0; 4]; // 32 bits = 4 bytes
+	NetworkEndian::write_i32(&mut bytes, data);
+
+	let mut byte_vec: Vec<u8> = Vec::with_capacity(4);
+	for i in 0..4 {
+		byte_vec.push(bytes[i]);
+	}
+
+	// assert byte_vec.len() == 4
+
+	write_bytes(stream, &byte_vec);
 }
 
-fn read_i32(stream: &mut TcpStream) {
-
+fn read_i32(stream: &mut TcpStream) -> i32 {
+	let encoded: Vec<u8> = read_bytes(stream, 4);
+	Cursor::new(encoded).read_i32::<NetworkEndian>().unwrap()
 }
 
 fn write_string(stream: &mut TcpStream, data: String) { // TODO stream.write_string(&mut self) {...
 	let encoded: Vec<u8> = net_encode_string(data);
-	write_bytes(stream, &encoded);
+	write_bytes_auto(stream, &encoded);
 }
 
 fn read_string(stream: &mut TcpStream) -> String {
 	let bytes = read_bytes_auto(stream, 1024); // read max of 1024 bytes
 	net_decode_string(bytes)
+}
+
+
+fn send_command_print_response(stream: &mut TcpStream, command: String) -> bool {
+	write_string(stream, command);
+
+	loop {
+		let input: String = read_string(stream);
+
+		match input.as_ref() {
+			"endconn" => return false,
+			"endresponse" => break,
+			_ => println!("[RESPONSE] '{}'", input),
+		}
+	}
+
+	true
 }
 
 fn main() {
@@ -116,14 +144,17 @@ fn main() {
 		}
 	}
 
-	write_string(&mut stream, String::from("help"));
-
 	loop {
-		let input: String = read_string(&mut stream);
+		print!("server> ");
+		io::stdout().flush().unwrap();
 
-		match input.as_ref() {
-			"end" => break,
-			_ => println!("[RESPONSE] '{}'", input),
+		let mut command: String = String::new();
+		match io::stdin().read_line(&mut command) {
+			Ok(_) => {
+				command.pop(); // remove trailing newline TODO: better trim method
+				if !send_command_print_response(&mut stream, command) { break }
+			},
+			Err(error) => println!("error reading from io::stdin(): {}", error),
 		}
 	}
 
