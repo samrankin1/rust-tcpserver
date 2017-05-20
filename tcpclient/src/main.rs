@@ -1,12 +1,11 @@
 extern crate byteorder;
 
-use std::io;
-use std::io::Write;
 use std::io::Read;
+use std::io::Write;
 use std::io::Cursor;
-use std::str::Split;
-use std::net::TcpListener;
 use std::net::TcpStream;
+
+use std::io;
 
 use byteorder::NetworkEndian;
 use byteorder::ByteOrder;
@@ -44,10 +43,8 @@ fn write_bytes_auto(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
 	// println!("length bytes: u64 = {:?}", encoded_len);
 	// println!("data: [u8; {}] = {:?}", bytes.len(), bytes);
 
-	let len_sent: usize = write_bytes(stream, &encoded_len);
+	write_bytes(stream, &encoded_len);
 	let bytes_sent = write_bytes(stream, bytes);
-
-	// println!("wrote {} + {} bytes", len_sent, bytes_sent);
 
 	bytes_sent
 }
@@ -58,7 +55,7 @@ fn write_bytes(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
 }
 
 fn read_bytes_auto(stream: &mut TcpStream, max_count: u64) -> Vec<u8> {
-	let mut len_bytes: Vec<u8> = read_bytes(stream, 8);
+	let len_bytes: Vec<u8> = read_bytes(stream, 8);
 
 	// println!("length bytes: u64 = {:?}", len_bytes);
 
@@ -113,6 +110,7 @@ fn read_string(stream: &mut TcpStream) -> String {
 	let bytes = read_bytes_auto(stream, 1024); // read max of 1024 bytes
 	net_decode_string(bytes)
 }
+
 
 
 fn send_command_print_response(stream: &mut TcpStream, command: String) -> bool {
