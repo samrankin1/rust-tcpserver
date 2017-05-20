@@ -45,9 +45,8 @@ fn write_bytes_auto(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
 	// println!("data: [u8; {}] = {:?}", bytes.len(), bytes);
 
 	write_bytes(stream, &encoded_len);
-	let bytes_sent = write_bytes(stream, bytes);
 
-	bytes_sent
+	write_bytes(stream, bytes)
 }
 
 fn write_bytes(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
