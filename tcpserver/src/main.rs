@@ -198,7 +198,7 @@ fn main() {
 
 			loop {
 				let input: String = read_string(&mut stream);
-				println!("in:'{}'", input);
+				// println!("in:'{}'", input);
 
 				let args: Vec<&str> = input.split(" ").collect();
 
@@ -207,17 +207,19 @@ fn main() {
 					continue;
 				}
 
-				println!("args[0] = '{}'", args[0]);
+				println!("cmd = '{}'", args[0]);
 
 				match args[0] {
-					"exit" => break, // TODO: move exit to client-side
+					"endconn" => {
+						println!("recieved shutdown notification from client");
+						break;
+					},
+
 					"caps" => execute_command(do_caps, &mut stream, &args),
 					"help" => execute_command(do_help, &mut stream, &args),
 					_ => execute_command(_do_unknown_command, &mut stream, &args),
 				}
 			}
-
-			write_string(&mut stream, "endconn");
 		});
 	}
 }

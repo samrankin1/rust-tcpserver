@@ -127,11 +127,16 @@ fn send_command_print_response(stream: &mut TcpStream, command: &str) -> bool {
 		match input.as_ref() {
 			"endconn" => return false,
 			"endresponse" => break,
+
 			_ => println!("{}", input),
 		}
 	}
 
 	true
+}
+
+fn send_shutdown_notification(stream: &mut TcpStream) {
+	write_string(stream, "endconn");
 }
 
 fn main() {
@@ -154,13 +159,16 @@ fn main() {
 		let mut command: String = String::new();
 		match io::stdin().read_line(&mut command) {
 			Ok(_) => {
-				command.pop();
-
-				if !send_command_print_response(&mut stream, &command) { break }
+				let command: &str = &command.trim();
+				match command {
+					"exit" => {
+						send_shutdown_notification(&mut stream);
+						break;
+					},
+					_ => if !send_command_print_response(&mut stream, command) { break },
+				}
 			},
 			Err(error) => println!("error reading from io::stdin(): {}", error),
 		}
 	}
-
-	println!("{}", "recieved shutdown signal from remote host");
 }
