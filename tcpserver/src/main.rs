@@ -170,18 +170,26 @@ fn execute_command(do_command: fn(&mut TcpStream, &[&str]) -> bool, stream: &mut
 	write_string(stream, "endresponse");
 }
 
-/*
-const supported_commands: [fn(&mut TcpStream, &[&str]) -> bool] = [
-	do_caps,
-	do_help,
-];
+fn get_command_by_name(command_str: &str) -> Option<fn(&mut TcpStream, &[&str]) -> bool> {
+	match command_str {
+		"caps" => Some(do_caps),
+		"help" => Some(do_help),
+		_ => None,
+	}
+}
 
-fn get_command_by_name(command_str: &str) -> fn(&mut TcpStream, &[&str]) -> bool {
-	match command_funct {
+/*
+fn get_help_by_command(command_funct: fn(&mut TcpStream, &[&str]) -> bool) -> &str {
+	match command_str {
 		do_caps => "caps [string]: echo a string back after converting it to all caps"),
 		do_help => "help: print a list of supported commands")
 	}
 }
+
+const help_commands: [fn(&mut TcpStream, &[&str]) -> bool] = [
+	do_caps,
+	do_help,
+];
 */
 
 fn main() {
@@ -207,17 +215,21 @@ fn main() {
 					continue;
 				}
 
-				println!("cmd = '{}'", args[0]);
+				let cmd: &str = args[0];
 
-				match args[0] {
+				println!("cmd = '{}'", cmd);
+
+				match cmd {
+					// special cases and packets
 					"endconn" => {
 						println!("recieved shutdown notification from client");
 						break;
 					},
 
-					"caps" => execute_command(do_caps, &mut stream, &args),
-					"help" => execute_command(do_help, &mut stream, &args),
-					_ => execute_command(_do_unknown_command, &mut stream, &args),
+					_ => {
+						let command_funct = get_command_by_name(cmd).unwrap_or(_do_unknown_command);
+						execute_command(command_funct, &mut stream, &args);
+					},
 				}
 			}
 		});
