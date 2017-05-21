@@ -24,20 +24,20 @@ fn net_encode_usize(data: usize) -> Vec<u8> {
 	result
 }
 
-fn net_decode_usize(encoded: Vec<u8>) -> u64 { // actually a u64 (TODO)
+fn net_decode_usize(encoded: &[u8]) -> u64 { // always a u64 for maximum compatibility
 	Cursor::new(encoded).read_u64::<NetworkEndian>().unwrap()
 }
 
-fn net_encode_string(data: String) -> Vec<u8> {
-	data.into_bytes()
+fn net_encode_string(data: &str) -> Vec<u8> {
+	data.as_bytes().to_vec()
 }
 
-fn net_decode_string(encoded: Vec<u8>) -> String {
-	String::from_utf8(encoded)
+fn net_decode_string(encoded: &[u8]) -> String {
+	String::from_utf8(encoded.to_vec())
 		.expect("utf8 error decoding string")
 }
 
-fn write_bytes_auto(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
+fn write_bytes_auto(stream: &mut TcpStream, bytes: &[u8]) -> usize {
 	let encoded_len: Vec<u8> = net_encode_usize(bytes.len());
 
 	// println!("len = {}", bytes.len());
@@ -49,7 +49,7 @@ fn write_bytes_auto(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
 	write_bytes(stream, bytes)
 }
 
-fn write_bytes(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
+fn write_bytes(stream: &mut TcpStream, bytes: &[u8]) -> usize {
 	stream.write(bytes)
 		.expect("failed to write bytes to stream")
 }
@@ -59,7 +59,7 @@ fn read_bytes_auto(stream: &mut TcpStream, max_count: u64) -> Vec<u8> {
 
 	// println!("length bytes: u64 = {:?}", len_bytes);
 
-	let len: u64 = net_decode_usize(len_bytes);
+	let len: u64 = net_decode_usize(&len_bytes);
 
 	// hard limit on memory allocated per read call (and packet size)
 	// prevents malicious or malformed packets from demanding large buffers
@@ -101,19 +101,19 @@ fn read_i32(stream: &mut TcpStream) -> i32 {
 	Cursor::new(encoded).read_i32::<NetworkEndian>().unwrap()
 }
 
-fn write_string(stream: &mut TcpStream, data: String) { // TODO stream.write_string(&mut self) {...
+fn write_string(stream: &mut TcpStream, data: &str) { // TODO stream.write_string(&mut self) {...
 	let encoded: Vec<u8> = net_encode_string(data);
 	write_bytes_auto(stream, &encoded);
 }
 
 fn read_string(stream: &mut TcpStream) -> String {
 	let bytes = read_bytes_auto(stream, 1024); // read max of 1024 bytes
-	net_decode_string(bytes)
+	net_decode_string(&bytes)
 }
 
 
 
-fn do_caps(stream: &mut TcpStream, args: &Vec<&str>) -> bool {
+fn do_caps(stream: &mut TcpStream, args: &[&str]) -> bool {
 	if args.len() < 2 {
 		return false;
 	}
@@ -131,44 +131,58 @@ fn do_caps(stream: &mut TcpStream, args: &Vec<&str>) -> bool {
 		result.push_str(&arg.to_uppercase());
 	}
 
-	write_string(stream, result);
+	write_string(stream, &result);
 
 	true
 }
 
-fn do_help(stream: &mut TcpStream, args: &Vec<&str>) -> bool {
-	write_string(stream, String::from("--- command list ---"));
-	write_string(stream, String::from("caps [string]: echo a string back after converting it to all caps"));
-	write_string(stream, String::from("help: print this list of supported commands"));
+fn do_help(stream: &mut TcpStream, args: &[&str]) -> bool {
+	write_string(stream, "--- command list ---");
+	// TODO
 
 	true
 }
 
-fn do_unknown_command(stream: &mut TcpStream, args: &Vec<&str>) -> bool {
-	write_string(stream, String::from("unknown command"));
-	write_string(stream, String::from("for a list of commands, send 'help'"));
+fn _do_unknown_command(stream: &mut TcpStream, args: &[&str]) -> bool {
+	write_string(stream, "unknown command");
+	write_string(stream, "for a list of commands, send 'help'");
 
 	false
 }
 
-fn do_empty_command(stream: &mut TcpStream, args: &Vec<&str>) -> bool {
-	write_string(stream, String::from("recieved empty command"));
-	write_string(stream, String::from("for a list of commands, send 'help'"));
+fn _do_empty_command(stream: &mut TcpStream, args: &[&str]) -> bool {
+	write_string(stream, "recieved empty command");
+	write_string(stream, "for a list of commands, send 'help'");
 
 	false
 }
 
-fn execute_command(do_command: fn(&mut TcpStream, &Vec<&str>) -> bool, stream: &mut TcpStream, args: &Vec<&str>) {
+fn execute_command(do_command: fn(&mut TcpStream, &[&str]) -> bool, stream: &mut TcpStream, args: &[&str]) {
 	let result: bool = do_command(stream, args);
 
-	write_string(stream, String::from("endresponse"));
 
 	if args.len() > 0 {
 		println!("executed '{}' command; result = {}", args[0], result);
 	} else {
 		println!("executed empty command; result = {}", result);
 	}
+
+	write_string(stream, "endresponse");
 }
+
+/*
+const supported_commands: [fn(&mut TcpStream, &[&str]) -> bool] = [
+	do_caps,
+	do_help,
+];
+
+fn get_command_by_name(command_str: &str) -> fn(&mut TcpStream, &[&str]) -> bool {
+	match command_funct {
+		do_caps => "caps [string]: echo a string back after converting it to all caps"),
+		do_help => "help: print a list of supported commands")
+	}
+}
+*/
 
 fn main() {
 	let listener = TcpListener::bind("127.0.0.1:8650").unwrap();
@@ -177,32 +191,33 @@ fn main() {
 		thread::spawn(|| {
 			let mut stream = stream.unwrap();
 
-			write_string(&mut stream, String::from("simple application-layer server"));
-			write_string(&mut stream, String::from("for a list of commands, send 'help'"));
+			write_string(&mut stream, "simple application-layer server");
+			write_string(&mut stream, "for a list of commands, send 'help'");
 
-			write_string(&mut stream, String::from("endheader"));
+			write_string(&mut stream, "endheader");
 
 			loop {
 				let input: String = read_string(&mut stream);
+				println!("in:'{}'", input);
 
 				let args: Vec<&str> = input.split(" ").collect();
 
 				if args.len() == 0 {
-					execute_command(do_empty_command, &mut stream, &args);
+					execute_command(_do_empty_command, &mut stream, &args);
 					continue;
 				}
 
 				println!("args[0] = '{}'", args[0]);
 
 				match args[0] {
-					"exit" => break,
+					"exit" => break, // TODO: move exit to client-side
 					"caps" => execute_command(do_caps, &mut stream, &args),
 					"help" => execute_command(do_help, &mut stream, &args),
-					_ => execute_command(do_unknown_command, &mut stream, &args),
+					_ => execute_command(_do_unknown_command, &mut stream, &args),
 				}
 			}
 
-			write_string(&mut stream, String::from("endconn"));
+			write_string(&mut stream, "endconn");
 		});
 	}
 }

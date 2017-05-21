@@ -23,20 +23,20 @@ fn net_encode_usize(data: usize) -> Vec<u8> {
 	result
 }
 
-fn net_decode_usize(encoded: Vec<u8>) -> u64 { // actually a u64 (TODO)
+fn net_decode_usize(encoded: &[u8]) -> u64 { // always a u64 for maximum compatibility
 	Cursor::new(encoded).read_u64::<NetworkEndian>().unwrap()
 }
 
-fn net_encode_string(data: String) -> Vec<u8> {
-	data.into_bytes()
+fn net_encode_string(data: &str) -> Vec<u8> {
+	data.as_bytes().to_vec()
 }
 
-fn net_decode_string(encoded: Vec<u8>) -> String {
-	String::from_utf8(encoded)
+fn net_decode_string(encoded: &[u8]) -> String {
+	String::from_utf8(encoded.to_vec())
 		.expect("utf8 error decoding string")
 }
 
-fn write_bytes_auto(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
+fn write_bytes_auto(stream: &mut TcpStream, bytes: &[u8]) -> usize {
 	let encoded_len: Vec<u8> = net_encode_usize(bytes.len());
 
 	// println!("len = {}", bytes.len());
@@ -48,7 +48,7 @@ fn write_bytes_auto(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
 	write_bytes(stream, bytes)
 }
 
-fn write_bytes(stream: &mut TcpStream, bytes: &Vec<u8>) -> usize {
+fn write_bytes(stream: &mut TcpStream, bytes: &[u8]) -> usize {
 	stream.write(bytes)
 		.expect("failed to write bytes to stream")
 }
@@ -58,7 +58,7 @@ fn read_bytes_auto(stream: &mut TcpStream, max_count: u64) -> Vec<u8> {
 
 	// println!("length bytes: u64 = {:?}", len_bytes);
 
-	let len: u64 = net_decode_usize(len_bytes);
+	let len: u64 = net_decode_usize(&len_bytes);
 
 	// hard limit on memory allocated per read call (and packet size)
 	// prevents malicious or malformed packets from demanding large buffers
@@ -100,19 +100,25 @@ fn read_i32(stream: &mut TcpStream) -> i32 {
 	Cursor::new(encoded).read_i32::<NetworkEndian>().unwrap()
 }
 
-fn write_string(stream: &mut TcpStream, data: String) { // TODO stream.write_string(&mut self) {...
+fn write_string(stream: &mut TcpStream, data: &str) { // TODO stream.write_string(&mut self) {...
 	let encoded: Vec<u8> = net_encode_string(data);
 	write_bytes_auto(stream, &encoded);
 }
 
 fn read_string(stream: &mut TcpStream) -> String {
 	let bytes = read_bytes_auto(stream, 1024); // read max of 1024 bytes
-	net_decode_string(bytes)
+	net_decode_string(&bytes)
 }
 
 
 
-fn send_command_print_response(stream: &mut TcpStream, command: String) -> bool {
+/*
+	TODO:
+	client-side "ping" timing code,
+	accompanied by server response function
+*/
+
+fn send_command_print_response(stream: &mut TcpStream, command: &str) -> bool {
 	write_string(stream, command);
 
 	loop {
@@ -121,7 +127,7 @@ fn send_command_print_response(stream: &mut TcpStream, command: String) -> bool 
 		match input.as_ref() {
 			"endconn" => return false,
 			"endresponse" => break,
-			_ => println!("[RESPONSE] '{}'", input),
+			_ => println!("{}", input),
 		}
 	}
 
@@ -137,7 +143,7 @@ fn main() {
 
 		match input.as_ref() {
 			"endheader" => break,
-			_ => println!("[HEADER] '{}'", input),
+			_ => println!("{}", input),
 		}
 	}
 
@@ -148,8 +154,9 @@ fn main() {
 		let mut command: String = String::new();
 		match io::stdin().read_line(&mut command) {
 			Ok(_) => {
-				command.pop(); // remove trailing newline TODO: better trim method
-				if !send_command_print_response(&mut stream, command) { break }
+				command.pop();
+
+				if !send_command_print_response(&mut stream, &command) { break }
 			},
 			Err(error) => println!("error reading from io::stdin(): {}", error),
 		}
