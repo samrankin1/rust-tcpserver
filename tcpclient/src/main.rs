@@ -110,6 +110,10 @@ fn read_string(stream: &mut TcpStream) -> String {
 	net_decode_string(&bytes)
 }
 
+fn send_shutdown_notification(stream: &mut TcpStream) {
+	write_string(stream, "endconn");
+}
+
 
 
 /*
@@ -118,6 +122,8 @@ fn read_string(stream: &mut TcpStream) -> String {
 	accompanied by server response function
 */
 
+// Send the command to the given stream and print response until an "endresponse" message is found
+// Returns whether the server will be expecting more input
 fn send_command_print_response(stream: &mut TcpStream, command: &str) -> bool {
 	write_string(stream, command);
 
@@ -135,13 +141,9 @@ fn send_command_print_response(stream: &mut TcpStream, command: &str) -> bool {
 	true
 }
 
-fn send_shutdown_notification(stream: &mut TcpStream) {
-	write_string(stream, "endconn");
-}
-
 fn main() {
 	let mut stream = TcpStream::connect("127.0.0.1:8650")
-		.expect("failed to connect to server");
+		.expect("[client] failed to connect to server");
 
 	loop {
 		let input: String = read_string(&mut stream);
@@ -167,10 +169,13 @@ fn main() {
 						break;
 					},
 
-					_ => if !send_command_print_response(&mut stream, command) { break },
+					_ => if !send_command_print_response(&mut stream, command) {
+						println!("[client] server indicates it will not be expecting any more commands");
+						break;
+					},
 				}
 			},
-			Err(error) => println!("error reading from io::stdin(): {}", error),
+			Err(error) => println!("[client] error reading from io::stdin(): {}", error),
 		}
 	}
 }

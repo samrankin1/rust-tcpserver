@@ -7,6 +7,7 @@ use std::net::TcpStream;
 
 use std::net::TcpListener;
 use std::thread;
+use std::ptr;
 
 use byteorder::NetworkEndian;
 use byteorder::ByteOrder;
@@ -111,11 +112,15 @@ fn read_string(stream: &mut TcpStream) -> String {
 	net_decode_string(&bytes)
 }
 
+fn send_shutdown_notification(stream: &mut TcpStream) {
+	write_string(stream, "endconn");
+}
 
 
-fn do_caps(stream: &mut TcpStream, args: &[&str]) -> bool {
+
+fn do_caps(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
 	if args.len() < 2 {
-		return false;
+		return Err(String::from("no args provided!"));
 	}
 
 	let mut result: String = String::new();
@@ -133,43 +138,78 @@ fn do_caps(stream: &mut TcpStream, args: &[&str]) -> bool {
 
 	write_string(stream, &result);
 
-	true
+	Ok(true)
 }
 
-fn do_help(stream: &mut TcpStream, args: &[&str]) -> bool {
-	write_string(stream, "--- command list ---");
-	// TODO
-
-	true
-}
-
-fn _do_unknown_command(stream: &mut TcpStream, args: &[&str]) -> bool {
+fn _do_unknown_command(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
 	write_string(stream, "unknown command");
 	write_string(stream, "for a list of commands, send 'help'");
 
-	false
+	Ok(true)
 }
 
-fn _do_empty_command(stream: &mut TcpStream, args: &[&str]) -> bool {
+fn _do_empty_command(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
 	write_string(stream, "recieved empty command");
 	write_string(stream, "for a list of commands, send 'help'");
 
-	false
+	Ok(true)
 }
 
-fn execute_command(do_command: fn(&mut TcpStream, &[&str]) -> bool, stream: &mut TcpStream, args: &[&str]) {
-	let result: bool = do_command(stream, args);
+// Execute the provided command function for the given stream and args
+// Returns wheter or not to continue listening for commands from the sender
+fn execute_command(do_command: fn(&mut TcpStream, &[&str]) -> Result<bool, String>, stream: &mut TcpStream, args: &[&str]) -> bool {
+	let mut cont: bool = true;
 
-	if args.len() > 0 {
-		println!("executed '{}' command; result = {}", args[0], result);
-	} else {
-		println!("executed empty command; result = {}", result);
+	match do_command(stream, args) {
+		Ok(value) => {
+			cont = value; // pass along the cont value provided by the executor function
+		},
+		Err(why) => {
+			write_string(stream, &why);
+
+			if args.len() > 0 {
+				write_string(stream, "");
+				write_string(stream, &format!("for a complete usage string, send 'help {}'", args[0]));
+			}
+
+			cont = true; // note: can never kill connection because of a reported command error
+		},
 	}
 
 	write_string(stream, "endresponse");
+	cont
 }
 
-fn get_command_by_name(command_str: &str) -> Option<fn(&mut TcpStream, &[&str]) -> bool> {
+
+const HELP_COMMANDS: Vec<fn(&mut TcpStream, &[&str]) -> Result<bool, String>> = vec![
+	do_caps,
+	do_help,
+];
+
+fn do_help(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
+
+	match args.len() {
+		1 => {
+			write_string(stream, "--- command list ---");
+			for help_string in get_helps() { write_string(stream, &help_string) }
+			write_string(stream, "--- end of command list ---");
+		},
+
+		2 => {
+			match get_command_by_name(args[1]) {
+				Some(command_funct) => write_string(stream, &get_help_by_command(command_funct)),
+				None => return Err(format!("no command found with name '{}'!", args[1])),
+			}
+		},
+
+		_ => return Err(String::from("too many arguments!")),
+	}
+
+	Ok(true)
+}
+
+// command's "name"
+fn get_command_by_name(command_str: &str) -> Option<fn(&mut TcpStream, &[&str]) -> Result<bool, String>> {
 	match command_str {
 		"caps" => Some(do_caps),
 		"help" => Some(do_help),
@@ -177,19 +217,23 @@ fn get_command_by_name(command_str: &str) -> Option<fn(&mut TcpStream, &[&str]) 
 	}
 }
 
-/*
-fn get_help_by_command(command_funct: fn(&mut TcpStream, &[&str]) -> bool) -> &str {
-	match command_str {
-		do_caps => "caps [string]: echo a string back after converting it to all caps"),
-		do_help => "help: print a list of supported commands")
+fn get_helps() -> Vec<String> {
+	let mut result: Vec<String> = Vec::with_capacity(HELP_COMMANDS.len());
+	for command_funct in HELP_COMMANDS {
+		result.push(get_help_by_command(command_funct));
 	}
+
+	result
 }
 
-const help_commands: [fn(&mut TcpStream, &[&str]) -> bool] = [
-	do_caps,
-	do_help,
-];
-*/
+fn get_help_by_command(command_funct: fn(&mut TcpStream, &[&str]) -> Result<bool, String>) -> String {
+	match command_funct {
+		// TODO: compare fn's
+		a if ptr::eq(a, do_help) => String::from("caps [string]: echo a string back after converting it to all caps"),
+		a if ptr::eq(&a, &do_help) => String::from("help <command>: print a the usage string for a command, or all commands if one is not specified"),
+		_ => String::from("no help found for this command! please report this bug"), // will not happen
+	}
+}
 
 fn main() {
 	let listener = TcpListener::bind("127.0.0.1:8650").unwrap();
@@ -227,7 +271,10 @@ fn main() {
 
 					_ => {
 						let command_funct = get_command_by_name(cmd).unwrap_or(_do_unknown_command); // unwrap command or default to unknown
-						execute_command(command_funct, &mut stream, &args);
+						if !execute_command(command_funct, &mut stream, &args) {
+							send_shutdown_notification(&mut stream);
+							break;
+						}
 					},
 				}
 			}
