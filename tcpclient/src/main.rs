@@ -148,6 +148,7 @@ fn main() {
 
 		match input.as_ref() {
 			"endheader" => break,
+
 			_ => println!("{}", input),
 		}
 	}
@@ -165,6 +166,7 @@ fn main() {
 						send_shutdown_notification(&mut stream);
 						break;
 					},
+
 					_ => if !send_command_print_response(&mut stream, command) { break },
 				}
 			},

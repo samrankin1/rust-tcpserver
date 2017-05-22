@@ -160,7 +160,6 @@ fn _do_empty_command(stream: &mut TcpStream, args: &[&str]) -> bool {
 fn execute_command(do_command: fn(&mut TcpStream, &[&str]) -> bool, stream: &mut TcpStream, args: &[&str]) {
 	let result: bool = do_command(stream, args);
 
-
 	if args.len() > 0 {
 		println!("executed '{}' command; result = {}", args[0], result);
 	} else {
@@ -227,7 +226,7 @@ fn main() {
 					},
 
 					_ => {
-						let command_funct = get_command_by_name(cmd).unwrap_or(_do_unknown_command);
+						let command_funct = get_command_by_name(cmd).unwrap_or(_do_unknown_command); // unwrap command or default to unknown
 						execute_command(command_funct, &mut stream, &args);
 					},
 				}
