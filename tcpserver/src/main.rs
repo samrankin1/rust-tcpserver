@@ -1,4 +1,5 @@
 extern crate byteorder;
+extern crate ref_eq;
 
 use std::io::Read;
 use std::io::Write;
@@ -7,11 +8,11 @@ use std::net::TcpStream;
 
 use std::net::TcpListener;
 use std::thread;
-use std::ptr;
 
 use byteorder::NetworkEndian;
 use byteorder::ByteOrder;
 use byteorder::ReadBytesExt;
+use ref_eq::ref_eq;
 
 fn net_encode_usize(data: usize) -> Vec<u8> {
 	let mut bytes: [u8; 8] = [0; 8]; // 64 bits = 8 bytes
@@ -181,7 +182,7 @@ fn execute_command(do_command: fn(&mut TcpStream, &[&str]) -> Result<bool, Strin
 }
 
 
-const HELP_COMMANDS: Vec<fn(&mut TcpStream, &[&str]) -> Result<bool, String>> = vec![
+static HELP_COMMANDS: [fn(&mut TcpStream, &[&str]) -> Result<bool, String>;2] = [
 	do_caps,
 	do_help,
 ];
@@ -219,8 +220,8 @@ fn get_command_by_name(command_str: &str) -> Option<fn(&mut TcpStream, &[&str]) 
 
 fn get_helps() -> Vec<String> {
 	let mut result: Vec<String> = Vec::with_capacity(HELP_COMMANDS.len());
-	for command_funct in HELP_COMMANDS {
-		result.push(get_help_by_command(command_funct));
+	for command_funct in &HELP_COMMANDS {
+		result.push(get_help_by_command(*command_funct));
 	}
 
 	result
@@ -229,8 +230,8 @@ fn get_helps() -> Vec<String> {
 fn get_help_by_command(command_funct: fn(&mut TcpStream, &[&str]) -> Result<bool, String>) -> String {
 	match command_funct {
 		// TODO: compare fn's
-		a if ptr::eq(a, do_help) => String::from("caps [string]: echo a string back after converting it to all caps"),
-		a if ptr::eq(&a, &do_help) => String::from("help <command>: print a the usage string for a command, or all commands if one is not specified"),
+		a if ref_eq(&a, &do_caps) => String::from("caps [string]: echo a string back after converting it to all caps"),
+		a if a == do_help => String::from("help <command>: print a the usage string for a command, or all commands if one is not specified"),
 		_ => String::from("no help found for this command! please report this bug"), // will not happen
 	}
 }
