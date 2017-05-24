@@ -39,6 +39,21 @@ fn net_decode_string(encoded: &[u8]) -> String {
 		.expect("utf8 error decoding string")
 }
 
+/* TODO:
+impl TcpStream {
+	fn write_bytes(&mut self, bytes: &[u8]) -> usize {
+
+	}
+
+	...
+}
+*/
+
+fn write_bytes(stream: &mut TcpStream, bytes: &[u8]) -> usize { // TODO universally migrate usize -> u64
+	stream.write(bytes)
+		.expect("failed to write bytes to stream")
+}
+
 fn write_bytes_auto(stream: &mut TcpStream, bytes: &[u8]) -> usize {
 	let encoded_len: Vec<u8> = net_encode_usize(bytes.len());
 
@@ -51,9 +66,16 @@ fn write_bytes_auto(stream: &mut TcpStream, bytes: &[u8]) -> usize {
 	write_bytes(stream, bytes)
 }
 
-fn write_bytes(stream: &mut TcpStream, bytes: &[u8]) -> usize {
-	stream.write(bytes)
-		.expect("failed to write bytes to stream")
+fn read_bytes(stream: &mut TcpStream, count: u64) -> Vec<u8> {
+	// println!("len = {}", count);
+
+	let mut result: Vec<u8> = vec![0; count as usize]; // TODO: "count as usize" may be unsafe
+	stream.read(&mut result)
+		.expect("failed to read bytes");
+
+	// println!("bytes: [u8; {}] = {:?}", count, result);
+
+	result
 }
 
 fn read_bytes_auto(stream: &mut TcpStream, max_count: u64) -> Vec<u8> {
@@ -70,18 +92,6 @@ fn read_bytes_auto(stream: &mut TcpStream, max_count: u64) -> Vec<u8> {
 	}
 
 	read_bytes(stream, len)
-}
-
-fn read_bytes(stream: &mut TcpStream, count: u64) -> Vec<u8> {
-	// println!("len = {}", count);
-
-	let mut result: Vec<u8> = vec![0; count as usize]; // TODO: "count as usize" may be unsafe
-	stream.read(&mut result)
-		.expect("failed to read bytes");
-
-	// println!("bytes: [u8; {}] = {:?}", count, result);
-
-	result
 }
 
 fn write_i32(stream: &mut TcpStream, data: i32) {
@@ -103,7 +113,7 @@ fn read_i32(stream: &mut TcpStream) -> i32 {
 	Cursor::new(encoded).read_i32::<NetworkEndian>().unwrap()
 }
 
-fn write_string(stream: &mut TcpStream, data: &str) { // TODO stream.write_string(&mut self) {...
+fn write_string(stream: &mut TcpStream, data: &str) {
 	let encoded: Vec<u8> = net_encode_string(data);
 	write_bytes_auto(stream, &encoded);
 }
