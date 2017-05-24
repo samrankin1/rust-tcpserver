@@ -46,7 +46,9 @@ impl TcpStream {
 }
 */
 
-fn write_bytes(stream: &mut TcpStream, bytes: &[u8]) -> usize { // TODO universally migrate usize -> u64
+// TODO: universally migrate usize -> u64
+// TODO: write_bytes and read_bytes automatic retry until entire buffer is sent
+fn write_bytes(stream: &mut TcpStream, bytes: &[u8]) -> usize {
 	stream.write(bytes)
 		.expect("failed to write bytes to stream")
 }
