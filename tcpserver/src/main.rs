@@ -1,5 +1,4 @@
 extern crate byteorder;
-extern crate ref_eq;
 
 use std::io::Read;
 use std::io::Write;
@@ -12,7 +11,6 @@ use std::thread;
 use byteorder::NetworkEndian;
 use byteorder::ByteOrder;
 use byteorder::ReadBytesExt;
-use ref_eq::ref_eq;
 
 fn net_encode_usize(data: usize) -> Vec<u8> {
 	let mut bytes: [u8; 8] = [0; 8]; // 64 bits = 8 bytes

@@ -5,4 +5,3 @@ authors = ["Sam Rankin <sam.rankin@me.com>"]
 
 [dependencies]
 byteorder = "1.0.0"
-ref_eq = "1.0.0"
