@@ -145,7 +145,10 @@ fn send_command_print_response(stream: &mut TcpStream, command: &str) -> bool {
 
 		match input.as_ref() {
 			"endconn" => return false,
-			"endresponse" => break,
+			"endresponse" => {
+				println!();
+				break;
+			},
 
 			_ => println!("{}", input),
 		}
@@ -183,7 +186,7 @@ fn main() {
 					},
 
 					"ping" => {
-						println!("[client] ping timed at {} ms", handle_ping(&mut stream).unwrap());
+						println!("[client] ping timed at {} ms\n", handle_ping(&mut stream).unwrap());
 					}
 
 					_ => if !send_command_print_response(&mut stream, command) {
