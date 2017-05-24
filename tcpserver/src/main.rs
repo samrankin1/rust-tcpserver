@@ -13,9 +13,9 @@ use byteorder::NetworkEndian;
 use byteorder::ByteOrder;
 use byteorder::ReadBytesExt;
 
-fn net_encode_usize(data: usize) -> Vec<u8> {
+fn net_encode_u64(data: u64) -> Vec<u8> {
 	let mut bytes: [u8; 8] = [0; 8]; // 64 bits = 8 bytes
-	NetworkEndian::write_u64(&mut bytes, data as u64);
+	NetworkEndian::write_u64(&mut bytes, data);
 
 	let mut result: Vec<u8> = Vec::with_capacity(8);
 	for i in 0..8 {
@@ -25,7 +25,7 @@ fn net_encode_usize(data: usize) -> Vec<u8> {
 	result
 }
 
-fn net_decode_usize(encoded: &[u8]) -> u64 { // always a u64 for maximum compatibility
+fn net_decode_u64(encoded: &[u8]) -> u64 { // always a u64 for maximum compatibility
 	Cursor::new(encoded).read_u64::<NetworkEndian>().unwrap()
 }
 
@@ -48,15 +48,14 @@ impl TcpStream {
 }
 */
 
-// TODO: universally migrate usize -> u64
 // TODO: write_bytes and read_bytes automatic retry until entire buffer is sent
-fn write_bytes(stream: &mut TcpStream, bytes: &[u8]) -> usize {
+fn write_bytes(stream: &mut TcpStream, bytes: &[u8]) -> u64 {
 	stream.write(bytes)
-		.expect("failed to write bytes to stream")
+		.expect("failed to write bytes to stream") as u64
 }
 
-fn write_bytes_auto(stream: &mut TcpStream, bytes: &[u8]) -> usize {
-	let encoded_len: Vec<u8> = net_encode_usize(bytes.len());
+fn write_bytes_auto(stream: &mut TcpStream, bytes: &[u8]) -> u64 {
+	let encoded_len: Vec<u8> = net_encode_u64(bytes.len()as u64);
 
 	// println!("len = {}", bytes.len());
 	// println!("length bytes: u64 = {:?}", encoded_len);
@@ -64,7 +63,7 @@ fn write_bytes_auto(stream: &mut TcpStream, bytes: &[u8]) -> usize {
 
 	write_bytes(stream, &encoded_len);
 
-	write_bytes(stream, bytes)
+	write_bytes(stream, bytes) as u64
 }
 
 fn read_bytes(stream: &mut TcpStream, count: u64) -> Vec<u8> {
@@ -84,11 +83,11 @@ fn read_bytes_auto(stream: &mut TcpStream, max_count: u64) -> Vec<u8> {
 
 	// println!("length bytes: u64 = {:?}", len_bytes);
 
-	let len: u64 = net_decode_usize(&len_bytes);
+	let len: u64 = net_decode_u64(&len_bytes);
 
 	// hard limit on memory allocated per read call (and packet size)
 	// prevents malicious or malformed packets from demanding large buffers
-	if len > max_count { // if the
+	if len > max_count {
 		return Vec::new(); // return empty set of bytes, signaling failure
 	}
 
