@@ -38,8 +38,8 @@ fn net_decode_string(encoded: &[u8]) -> String {
 
 trait Netcode {
 
-	fn write_bytes(&mut self, bytes: &[u8]) -> u64;
-	fn write_bytes_auto(&mut self, bytes: &[u8]) -> u64;
+	fn write_bytes(&mut self, bytes: &[u8]);
+	fn write_bytes_auto(&mut self, bytes: &[u8]);
 
 	fn read_bytes(&mut self, count: u64) -> Vec<u8>;
 	fn read_bytes_auto(&mut self, max_count: u64) -> Vec<u8>;
@@ -53,30 +53,27 @@ trait Netcode {
 
 impl Netcode for TcpStream {
 
-	// TODO: write_bytes and read_bytes automatic retry until entire buffer is sent
-
-	fn write_bytes(&mut self, bytes: &[u8]) -> u64 {
-		self.write(bytes)
-			.expect("failed to write bytes to stream") as u64
+	fn write_bytes(&mut self, bytes: &[u8]) {
+		self.write_all(bytes)
+			.expect("failed to write bytes to stream");
 	}
 
-	fn write_bytes_auto(&mut self, bytes: &[u8]) -> u64 {
-		let encoded_len: Vec<u8> = net_encode_u64(bytes.len()as u64);
+	fn write_bytes_auto(&mut self, bytes: &[u8]) {
+		let encoded_len: Vec<u8> = net_encode_u64(bytes.len() as u64);
 
 		// println!("len = {}", bytes.len());
 		// println!("length bytes: u64 = {:?}", encoded_len);
 		// println!("data: [u8; {}] = {:?}", bytes.len(), bytes);
 
 		self.write_bytes(&encoded_len);
-
-		self.write_bytes(bytes) as u64
+		self.write_bytes(bytes);
 	}
 
 	fn read_bytes(&mut self, count: u64) -> Vec<u8> {
 		// println!("len = {}", count);
 
 		let mut result: Vec<u8> = vec![0; count as usize]; // TODO: "count as usize" may be unsafe
-		self.read(&mut result)
+		self.read_exact(&mut result)
 			.expect("failed to read bytes");
 
 		// println!("bytes: [u8; {}] = {:?}", count, result);
