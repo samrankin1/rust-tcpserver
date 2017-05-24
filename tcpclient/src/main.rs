@@ -36,95 +36,84 @@ fn net_decode_string(encoded: &[u8]) -> String {
 		.expect("utf8 error decoding string")
 }
 
-/* TODO:
-impl TcpStream {
-	fn write_bytes(&mut self, bytes: &[u8]) -> usize {
+trait Netcode {
 
+	fn write_bytes(&mut self, bytes: &[u8]) -> u64;
+	fn write_bytes_auto(&mut self, bytes: &[u8]) -> u64;
+
+	fn read_bytes(&mut self, count: u64) -> Vec<u8>;
+	fn read_bytes_auto(&mut self, max_count: u64) -> Vec<u8>;
+
+	fn write_string(&mut self, data: &str);
+	fn read_string(&mut self) -> String;
+
+	fn send_shutdown_notification(&mut self);
+
+}
+
+impl Netcode for TcpStream {
+
+	// TODO: write_bytes and read_bytes automatic retry until entire buffer is sent
+
+	fn write_bytes(&mut self, bytes: &[u8]) -> u64 {
+		self.write(bytes)
+			.expect("failed to write bytes to stream") as u64
 	}
 
-	...
-}
-*/
+	fn write_bytes_auto(&mut self, bytes: &[u8]) -> u64 {
+		let encoded_len: Vec<u8> = net_encode_u64(bytes.len()as u64);
 
-// TODO: write_bytes and read_bytes automatic retry until entire buffer is sent
-fn write_bytes(stream: &mut TcpStream, bytes: &[u8]) -> u64 {
-	stream.write(bytes)
-		.expect("failed to write bytes to stream") as u64
-}
+		// println!("len = {}", bytes.len());
+		// println!("length bytes: u64 = {:?}", encoded_len);
+		// println!("data: [u8; {}] = {:?}", bytes.len(), bytes);
 
-fn write_bytes_auto(stream: &mut TcpStream, bytes: &[u8]) -> u64 {
-	let encoded_len: Vec<u8> = net_encode_u64(bytes.len()as u64);
+		self.write_bytes(&encoded_len);
 
-	// println!("len = {}", bytes.len());
-	// println!("length bytes: u64 = {:?}", encoded_len);
-	// println!("data: [u8; {}] = {:?}", bytes.len(), bytes);
-
-	write_bytes(stream, &encoded_len);
-
-	write_bytes(stream, bytes) as u64
-}
-
-fn read_bytes(stream: &mut TcpStream, count: u64) -> Vec<u8> {
-	// println!("len = {}", count);
-
-	let mut result: Vec<u8> = vec![0; count as usize]; // TODO: "count as usize" may be unsafe
-	stream.read(&mut result)
-		.expect("failed to read bytes");
-
-	// println!("bytes: [u8; {}] = {:?}", count, result);
-
-	result
-}
-
-fn read_bytes_auto(stream: &mut TcpStream, max_count: u64) -> Vec<u8> {
-	let len_bytes: Vec<u8> = read_bytes(stream, 8);
-
-	// println!("length bytes: u64 = {:?}", len_bytes);
-
-	let len: u64 = net_decode_u64(&len_bytes);
-
-	// hard limit on memory allocated per read call (and packet size)
-	// prevents malicious or malformed packets from demanding large buffers
-	if len > max_count {
-		return Vec::new(); // return empty set of bytes, signaling failure
+		self.write_bytes(bytes) as u64
 	}
 
-	read_bytes(stream, len)
-}
+	fn read_bytes(&mut self, count: u64) -> Vec<u8> {
+		// println!("len = {}", count);
 
-/* not used yet
-fn write_i32(stream: &mut TcpStream, data: i32) {
-	let mut bytes: [u8; 4] = [0; 4]; // 32 bits = 4 bytes
-	NetworkEndian::write_i32(&mut bytes, data);
+		let mut result: Vec<u8> = vec![0; count as usize]; // TODO: "count as usize" may be unsafe
+		self.read(&mut result)
+			.expect("failed to read bytes");
 
-	let mut byte_vec: Vec<u8> = Vec::with_capacity(4);
-	for i in 0..4 {
-		byte_vec.push(bytes[i]);
+		// println!("bytes: [u8; {}] = {:?}", count, result);
+
+		result
 	}
 
-	// assert byte_vec.len() == 4
+	fn read_bytes_auto(&mut self, max_count: u64) -> Vec<u8> {
+		let len_bytes: Vec<u8> = self.read_bytes(8);
 
-	write_bytes(stream, &byte_vec);
-}
+		// println!("length bytes: u64 = {:?}", len_bytes);
 
-fn read_i32(stream: &mut TcpStream) -> i32 {
-	let encoded: Vec<u8> = read_bytes(stream, 4);
-	Cursor::new(encoded).read_i32::<NetworkEndian>().unwrap()
-}
-*/
+		let len: u64 = net_decode_u64(&len_bytes);
 
-fn write_string(stream: &mut TcpStream, data: &str) {
-	let encoded: Vec<u8> = net_encode_string(data);
-	write_bytes_auto(stream, &encoded);
-}
+		// hard limit on memory allocated per read call (and packet size)
+		// prevents malicious or malformed packets from demanding large buffers
+		if len > max_count {
+			return Vec::new(); // return empty set of bytes, signaling failure
+		}
 
-fn read_string(stream: &mut TcpStream) -> String {
-	let bytes = read_bytes_auto(stream, 1024); // read max of 1024 bytes
-	net_decode_string(&bytes)
-}
+		self.read_bytes(len)
+	}
 
-fn send_shutdown_notification(stream: &mut TcpStream) {
-	write_string(stream, "endconn");
+	fn write_string(&mut self, data: &str) {
+		let encoded: Vec<u8> = net_encode_string(data);
+		self.write_bytes_auto(&encoded);
+	}
+
+	fn read_string(&mut self) -> String {
+		let bytes = self.read_bytes_auto(1024); // read max of 1024 bytes
+		net_decode_string(&bytes)
+	}
+
+	fn send_shutdown_notification(&mut self) {
+		self.write_string("endconn");
+	}
+
 }
 
 
@@ -138,10 +127,10 @@ fn send_shutdown_notification(stream: &mut TcpStream) {
 // Send the command to the given stream and print response until an "endresponse" message is found
 // Returns whether the server will be expecting more input
 fn send_command_print_response(stream: &mut TcpStream, command: &str) -> bool {
-	write_string(stream, command);
+	stream.write_string(command);
 
 	loop {
-		let input: String = read_string(stream);
+		let input: String = stream.read_string();
 
 		match input.as_ref() {
 			"endconn" => return false,
@@ -159,7 +148,7 @@ fn main() {
 		.expect("[client] failed to connect to server");
 
 	loop {
-		let input: String = read_string(&mut stream);
+		let input: String = stream.read_string();
 
 		match input.as_ref() {
 			"endheader" => break,
@@ -178,7 +167,7 @@ fn main() {
 				let command: &str = &command.trim();
 				match command {
 					"exit" => {
-						send_shutdown_notification(&mut stream);
+						stream.send_shutdown_notification();
 						break;
 					},
 
