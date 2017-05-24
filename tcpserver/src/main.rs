@@ -118,9 +118,7 @@ impl Netcode for TcpStream {
 
 
 fn do_caps(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
-	if args.len() < 2 {
-		return Err(String::from("no args provided!"));
-	}
+	if args.len() < 2 { return Err(String::from("no args provided!")) }
 
 	let mut result: String = String::new();
 
@@ -136,6 +134,14 @@ fn do_caps(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
 	}
 
 	stream.write_string(&result);
+
+	Ok(true)
+}
+
+fn do_ping(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
+	if args.len() > 1 { return Err(String::from("too many arguments!")) }
+
+	stream.write_string("pong");
 
 	Ok(true)
 }
@@ -192,7 +198,7 @@ impl<'a> Command<'a> {
 	}
 }
 
-const COMMANDS: [Command;2] = [ // TODO: auto-fill length?
+const COMMANDS: [Command;3] = [ // TODO: auto-fill length?
 	Command {
 		name: "caps",
 		usage: "caps [string]: echo a string back after converting it to all caps",
@@ -200,10 +206,16 @@ const COMMANDS: [Command;2] = [ // TODO: auto-fill length?
 	},
 
 	Command {
+		name: "ping",
+		usage: "ping: server will return the string 'pong'",
+		function: do_ping,
+	},
+
+	Command {
 		name: "help",
 		usage: "help <command>: print a the usage string for a command, or all commands if one is not specified",
 		function: do_help,
-	}
+	},
 ];
 
 fn get_command_by_name(command_str: &str) -> Option<Command> {

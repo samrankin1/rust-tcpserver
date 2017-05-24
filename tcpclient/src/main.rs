@@ -1,4 +1,5 @@
 extern crate byteorder;
+extern crate time;
 
 use std::io::Read;
 use std::io::Write;
@@ -10,6 +11,8 @@ use std::io;
 use byteorder::NetworkEndian;
 use byteorder::ByteOrder;
 use byteorder::ReadBytesExt;
+
+use time::Duration;
 
 fn net_encode_u64(data: u64) -> Vec<u8> {
 	let mut bytes: [u8; 8] = [0; 8]; // 64 bits = 8 bytes
@@ -115,11 +118,22 @@ impl Netcode for TcpStream {
 
 
 
-/*
-	TODO:
-	client-side "ping" timing code,
-	accompanied by server response function
-*/
+fn handle_ping(stream: &mut TcpStream) -> Result<i64, &str> {
+	stream.write_string("ping");
+
+	let mut pong: String = String::new();
+	let millis: i64 = Duration::span(|| { // TODO: investigate unreliable results
+		pong = stream.read_string();
+	}).num_milliseconds();
+
+	match pong.as_ref() {
+		"pong" => {
+			stream.read_string(); // discard "endresponse" message
+			Ok(millis)
+		}
+		_ => Err("unexpected ping response"),
+	}
+}
 
 // Send the command to the given stream and print response until an "endresponse" message is found
 // Returns whether the server will be expecting more input
@@ -167,6 +181,10 @@ fn main() {
 						stream.send_shutdown_notification();
 						break;
 					},
+
+					"ping" => {
+						println!("[client] ping timed at {} ms", handle_ping(&mut stream).unwrap());
+					}
 
 					_ => if !send_command_print_response(&mut stream, command) {
 						println!("[client] server indicates it will not be expecting any more commands");
