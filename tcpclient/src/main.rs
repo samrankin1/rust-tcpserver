@@ -93,6 +93,7 @@ fn read_bytes_auto(stream: &mut TcpStream, max_count: u64) -> Vec<u8> {
 	read_bytes(stream, len)
 }
 
+/* not used yet
 fn write_i32(stream: &mut TcpStream, data: i32) {
 	let mut bytes: [u8; 4] = [0; 4]; // 32 bits = 4 bytes
 	NetworkEndian::write_i32(&mut bytes, data);
@@ -111,6 +112,7 @@ fn read_i32(stream: &mut TcpStream) -> i32 {
 	let encoded: Vec<u8> = read_bytes(stream, 4);
 	Cursor::new(encoded).read_i32::<NetworkEndian>().unwrap()
 }
+*/
 
 fn write_string(stream: &mut TcpStream, data: &str) {
 	let encoded: Vec<u8> = net_encode_string(data);

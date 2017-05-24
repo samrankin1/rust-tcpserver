@@ -3,6 +3,7 @@ extern crate byteorder;
 use std::io::Read;
 use std::io::Write;
 use std::io::Cursor;
+use std::clone::Clone;
 use std::net::TcpStream;
 
 use std::net::TcpListener;
@@ -94,6 +95,7 @@ fn read_bytes_auto(stream: &mut TcpStream, max_count: u64) -> Vec<u8> {
 	read_bytes(stream, len)
 }
 
+/* not used yet
 fn write_i32(stream: &mut TcpStream, data: i32) {
 	let mut bytes: [u8; 4] = [0; 4]; // 32 bits = 4 bytes
 	NetworkEndian::write_i32(&mut bytes, data);
@@ -112,6 +114,7 @@ fn read_i32(stream: &mut TcpStream) -> i32 {
 	let encoded: Vec<u8> = read_bytes(stream, 4);
 	Cursor::new(encoded).read_i32::<NetworkEndian>().unwrap()
 }
+*/
 
 fn write_string(stream: &mut TcpStream, data: &str) {
 	let encoded: Vec<u8> = net_encode_string(data);
@@ -156,8 +159,13 @@ fn do_help(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
 
 	match args.len() {
 		1 => {
-			write_string(stream, "--- command list ---");
-			for command in &COMMANDS { write_string(stream, command.usage) }
+			write_string(stream, "--- command list ---\n");
+
+			for command in &COMMANDS {
+				write_string(stream, command.usage);
+				write_string(stream, "");
+			}
+
 			write_string(stream, "--- end of command list ---");
 		},
 
@@ -175,13 +183,32 @@ fn do_help(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
 }
 
 
-struct Command {
-	name: &'static str,
-	usage: &'static str,
+struct Command<'a> {
+	name: &'a str,
+	usage: &'a str,
 	function: fn(&mut TcpStream, &[&str]) -> Result<bool, String>,
 }
 
-const COMMANDS: [Command;1] = [ // TODO: auto-fill length?
+impl<'a> Clone for Command<'a> {
+	fn clone(&self) -> Self {
+		Command {
+			name: self.name,
+			usage: self.usage,
+			function: self.function,
+		}
+	}
+}
+
+impl<'a> Command<'a> {
+	fn short_usage(&self) -> Result<&str, &str> {
+		match (&self).usage.find(':') {
+			Some(last_index) => Ok(&(&self).usage[0..last_index]),
+			None => Err("err: no semicolon delimiter found in command's usage string!")
+		}
+	}
+}
+
+const COMMANDS: [Command;2] = [ // TODO: auto-fill length?
 	Command {
 		name: "caps",
 		usage: "caps [string]: echo a string back after converting it to all caps",
@@ -197,7 +224,7 @@ const COMMANDS: [Command;1] = [ // TODO: auto-fill length?
 
 fn get_command_by_name(command_str: &str) -> Option<Command> {
 	for command in &COMMANDS {
-		if command.name == command_str { Some(command) }
+		if command.name == command_str { return Some(command.clone()) }
 	}
 
 	None
@@ -207,7 +234,7 @@ fn get_command_by_name(command_str: &str) -> Option<Command> {
 // If the Command returns an Err, the Command's usage string will be sent to the client
 // Returns wheter or not to continue listening for commands from the sender
 fn execute_command(command: Command, stream: &mut TcpStream, args: &[&str]) -> bool {
-	let mut cont: bool = true;
+	let cont: bool;
 
 	match (command.function)(stream, args) {
 		Ok(value) => {
@@ -219,7 +246,7 @@ fn execute_command(command: Command, stream: &mut TcpStream, args: &[&str]) -> b
 
 			if args.len() > 0 {
 				write_string(stream, "");
-				write_string(stream, &format!("usage: '{}'", command.usage));
+				write_string(stream, &format!("usage: {}", command.short_usage().unwrap()));
 			}
 
 			cont = true; // note: can never kill connection because of a reported command error
@@ -240,7 +267,6 @@ fn main() {
 
 			write_string(&mut stream, "simple application-layer server");
 			write_string(&mut stream, "for a list of commands, send 'help'");
-
 			write_string(&mut stream, "endheader");
 
 			loop {
@@ -250,8 +276,9 @@ fn main() {
 				let args: Vec<&str> = input.split(" ").collect();
 
 				if args.len() == 0 {
-					write_string(stream, "recieved empty command");
-					write_string(stream, "for a list of commands, send 'help'");
+					write_string(&mut stream, "error: recieved empty command");
+					write_string(&mut stream, "for a list of commands, send 'help'");
+					write_string(&mut stream, "endresponse");
 					continue;
 				}
 
@@ -276,8 +303,9 @@ fn main() {
 							},
 
 							None => {
-								write_string(stream, "unknown command");
-								write_string(stream, "for a list of commands, send 'help'");
+								write_string(&mut stream, "error: unknown command");
+								write_string(&mut stream, "for a list of commands, send 'help'");
+								write_string(&mut stream, "endresponse");
 							}
 						}
 					},
