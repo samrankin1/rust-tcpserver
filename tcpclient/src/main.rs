@@ -16,8 +16,8 @@ fn net_encode_u64(data: u64) -> Vec<u8> {
 	NetworkEndian::write_u64(&mut bytes, data);
 
 	let mut result: Vec<u8> = Vec::with_capacity(8);
-	for i in 0..8 {
-		result.push(bytes[i]);
+	for byte in &bytes {
+		result.push(*byte);
 	}
 
 	result
