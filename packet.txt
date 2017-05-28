@@ -1,0 +1,8 @@
+[unencrypted packet format]
+length (8 bytes): u64 as [u8; 8]
+content (variable size): [u8]
+
+[encrypted packet format]
+nonce (12 bytes): [u8; 12]
+length (8 bytes): u64 as [u8; 8]
+encrypted (varible size): [u8]

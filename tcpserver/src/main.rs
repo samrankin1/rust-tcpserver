@@ -1,13 +1,12 @@
 extern crate netcode;
 
-use netcode::Netcode;
+use netcode::AESClient;
 
 use std::thread;
 use std::clone::Clone;
-use std::net::TcpStream;
 use std::net::TcpListener;
 
-fn do_caps(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
+fn do_caps(stream: &mut AESClient, args: &[&str]) -> Result<bool, String> {
 	if args.len() < 2 { return Err(String::from("no args provided!")) }
 
 	let mut result: String = String::new();
@@ -23,35 +22,35 @@ fn do_caps(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
 		result.push_str(&arg.to_uppercase());
 	}
 
-	stream.write_string(&result);
+	stream.write_string_enc(&result);
 
 	Ok(true)
 }
 
-fn do_ping(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
+fn do_ping(stream: &mut AESClient, args: &[&str]) -> Result<bool, String> {
 	if args.len() > 1 { return Err(String::from("too many arguments!")) }
 
-	stream.write_string("pong");
+	stream.write_string_enc("pong");
 
 	Ok(true)
 }
 
-fn do_help(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
+fn do_help(stream: &mut AESClient, args: &[&str]) -> Result<bool, String> {
 	match args.len() {
 		1 => {
-			stream.write_string("--- command list ---\n");
+			stream.write_string_enc("--- command list ---\n");
 
 			for command in &COMMANDS {
-				stream.write_string(command.usage);
-				stream.write_string("");
+				stream.write_string_enc(command.usage);
+				stream.write_string_enc("");
 			}
 
-			stream.write_string("--- end of command list ---");
+			stream.write_string_enc("--- end of command list ---");
 		},
 
 		2 => {
 			match get_command_by_name(args[1]) {
-				Some(command) => stream.write_string(command.usage),
+				Some(command) => stream.write_string_enc(command.usage),
 				None => return Err(format!("no command found with name '{}'!", args[1])),
 			}
 		},
@@ -66,7 +65,7 @@ fn do_help(stream: &mut TcpStream, args: &[&str]) -> Result<bool, String> {
 struct Command<'a> {
 	name: &'a str,
 	usage: &'a str,
-	function: fn(&mut TcpStream, &[&str]) -> Result<bool, String>,
+	function: fn(&mut AESClient, &[&str]) -> Result<bool, String>,
 }
 
 impl<'a> Clone for Command<'a> {
@@ -119,7 +118,7 @@ fn get_command_by_name(command_str: &str) -> Option<Command> {
 // Execute the provided command function for the given stream and args
 // If the Command returns an Err, the Command's usage string will be sent to the client
 // Returns wheter or not to continue listening for commands from the sender
-fn execute_command(command: Command, stream: &mut TcpStream, args: &[&str]) -> bool {
+fn execute_command(command: Command, stream: &mut AESClient, args: &[&str]) -> bool {
 	let cont: bool;
 
 	match (command.function)(stream, args) {
@@ -128,43 +127,52 @@ fn execute_command(command: Command, stream: &mut TcpStream, args: &[&str]) -> b
 		},
 
 		Err(why) => {
-			stream.write_string(&why);
+			stream.write_string_enc(&why);
 
 			if args.len() > 0 {
-				stream.write_string("");
-				stream.write_string(&format!("usage: {}", command.short_usage().unwrap()));
+				stream.write_string_enc("");
+				stream.write_string_enc(&format!("usage: {}", command.short_usage().unwrap()));
 			}
 
 			cont = true; // note: can never kill connection because of a reported command error
 		},
 	}
 
-	stream.write_string("endresponse");
+	stream.write_string_enc("endresponse");
 	cont
 }
 
 
+fn send_shutdown_notification(stream: &mut AESClient) {
+	stream.write_string_enc("endconn");
+}
+
 fn main() {
 	let listener = TcpListener::bind("127.0.0.1:8650").unwrap();
-	println!("listening started, ready to accept");
+	println!("listening started, ready to accept\n");
+
 	for stream in listener.incoming() {
 		thread::spawn(|| {
 			let mut stream = stream.unwrap();
+			let mut stream = AESClient::from_server_socket(&mut stream);
 
-			stream.write_string("simple application-layer server");
-			stream.write_string("for a list of commands, send 'help'");
-			stream.write_string("endheader");
+			println!("[server] negotiated key = {:?}\n", stream.key);
+			// TODO: short opcode function to ensure successful communication
+
+			stream.write_string_enc("simple application-layer server");
+			stream.write_string_enc("for a list of commands, send 'help'");
+			stream.write_string_enc("endheader");
 
 			loop {
-				let input: String = stream.read_string();
+				let input: String = stream.read_string_enc();
 				// println!("in:'{}'", input);
 
 				let args: Vec<&str> = input.split(" ").collect();
 
 				if args.len() == 0 {
-					stream.write_string("error: recieved empty command");
-					stream.write_string("for a list of commands, send 'help'");
-					stream.write_string("endresponse");
+					stream.write_string_enc("error: recieved empty command");
+					stream.write_string_enc("for a list of commands, send 'help'");
+					stream.write_string_enc("endresponse");
 					continue;
 				}
 
@@ -183,15 +191,15 @@ fn main() {
 						match get_command_by_name(cmd) {
 							Some(command) => {
 								if !execute_command(command, &mut stream, &args) {
-									stream.send_shutdown_notification();
+									send_shutdown_notification(&mut stream);
 									break;
 								}
 							},
 
 							None => {
-								stream.write_string("error: unknown command");
-								stream.write_string("for a list of commands, send 'help'");
-								stream.write_string("endresponse");
+								stream.write_string_enc("error: unknown command");
+								stream.write_string_enc("for a list of commands, send 'help'");
+								stream.write_string_enc("endresponse");
 							}
 						}
 					},
