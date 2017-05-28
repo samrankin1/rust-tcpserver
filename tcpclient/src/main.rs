@@ -1,7 +1,7 @@
-extern crate netcode;
+extern crate cryptonet;
 extern crate time;
 
-use netcode::AESClient;
+use cryptonet::AESClient;
 
 use std::io;
 use std::io::Write;
@@ -59,7 +59,6 @@ fn main() {
 
 	let mut stream = AESClient::from_client_socket(&mut stream);
 
-	println!("[client] negotiated key = {:?}\n", stream.key);
 	// TODO: short opcode function to ensure successful communication
 
 	loop {

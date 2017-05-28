@@ -1,6 +1,6 @@
-extern crate netcode;
+extern crate cryptonet;
 
-use netcode::AESClient;
+use cryptonet::AESClient;
 
 use std::thread;
 use std::clone::Clone;
@@ -156,7 +156,6 @@ fn main() {
 			let mut stream = stream.unwrap();
 			let mut stream = AESClient::from_server_socket(&mut stream);
 
-			println!("[server] negotiated key = {:?}\n", stream.key);
 			// TODO: short opcode function to ensure successful communication
 
 			stream.write_string_enc("simple application-layer server");
