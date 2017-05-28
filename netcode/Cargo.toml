@@ -1,9 +1,0 @@
-[package]
-name = "netcode"
-version = "0.1.0"
-authors = ["Sam Rankin <sam.rankin@me.com>"]
-
-[dependencies]
-byteorder = "1.0.0"
-ring = "0.9.7"
-untrusted = "0.5.0"
